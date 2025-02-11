@@ -3,10 +3,10 @@ import sqlite3
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 from bidi.algorithm import get_display
 import arabic_reshaper
-import openai
 import os
 import torch
-from flask_cors import CORS  # Import CORS
+from flask_cors import CORS
+import requests  # Import requests for Gemini API calls
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -17,12 +17,10 @@ model_name = "aubmindlab/bert-base-arabert"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForQuestionAnswering.from_pretrained(model_name)
 
-# Load OpenAI API key from environment variable
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key:
-    openai.api_key = openai_api_key
-else:
-    print("Warning: OpenAI API key not found. The OpenAI API will not be called.")
+# Load Gemini API key from environment variable
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+if not gemini_api_key:
+    print("Warning: Gemini API key not found. The Gemini API will not be called.")
 
 DATABASE = "materials.db"
 
@@ -71,28 +69,30 @@ def ask_arabert(question, context):
     
     return answer
 
-# Fallback to OpenAI API
-def ask_openai(question, context, preferred_language):
-    if not openai_api_key:
-        return "OpenAI API key is not set. Please provide a valid API key to use this feature."
+# Fallback to Gemini API
+def ask_gemini(question, context, preferred_language):
+    if not gemini_api_key:
+        return "Gemini API key is not set. Please provide a valid API key to use this feature."
     
-    prompt = f"""
-    You are an Arabic teacher. You must answer only based on the given context.
-
-    Context:
-    {context}
-
-    Question:
-    {question}
-
-    Answer in {preferred_language}.
-    """
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150,
-    )
-    return response.choices[0].text.strip()
+    url = "https://gemini-api-url.com/v1/ask"  # Update with the actual Gemini API URL
+    headers = {
+        "Authorization": f"Bearer {gemini_api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "context": context,
+        "question": question,
+        "language": preferred_language
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        result = response.json()
+        return result.get("answer", "No answer found.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error using Gemini API: {e}")
+        return "Error fetching response from Gemini API."
 
 # Transliteration: Arabic → Hebrew
 def transliterate_to_hebrew(text):
@@ -140,7 +140,7 @@ def ask():
         answer = ask_arabert(question, context)
     except Exception as e:
         print(f"Error using AraBERT: {e}")
-        answer = ask_openai(question, context, preferred_language)
+        answer = ask_gemini(question, context, preferred_language)
 
     if preferred_language == "arabic":
         response = answer
@@ -151,8 +151,7 @@ def ask():
     else:
         response = "Invalid language option."
 
-   # return jsonify({"answer": response})
-    return jsonify({"answer": "Hello from the backend!"})
+    return jsonify({"answer": response})
 
 # Serve Frontend
 @app.route("/")
