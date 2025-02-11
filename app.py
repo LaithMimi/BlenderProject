@@ -1,26 +1,18 @@
 from flask import Flask, request, jsonify, render_template, g
 import sqlite3
-from transformers import AutoTokenizer, AutoModelForQuestionAnswering
-from bidi.algorithm import get_display
-import arabic_reshaper
 import os
-import torch
+import requests  # Import requests for OpenAI API calls
+import pandas as pd  
 from flask_cors import CORS
-import requests  # Import requests for Gemini API calls
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# Load AraBERT model
-model_name = "aubmindlab/bert-base-arabert"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-
-# Load Gemini API key from environment variable
-gemini_api_key = os.getenv("GEMINI_API_KEY")
-if not gemini_api_key:
-    print("Warning: Gemini API key not found. The Gemini API will not be called.")
+# Load OpenAI API key from environment variable
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    print("Warning: OpenAI API key not found. The OpenAI API will not be called.")
 
 DATABASE = "materials.db"
 
@@ -43,56 +35,56 @@ def get_content_by_level_week(level, week):
     result = cursor.fetchone()
     return result[0] if result else "No content found for the selected week."
 
-# Generate response with AraBERT
-def ask_arabert(question, context):
-    inputs = tokenizer.encode_plus(question, context, return_tensors="pt", truncation=True, padding=True)
-    
-    # Debug: Print the input tokens
-    print("Input IDs:", inputs.input_ids)
-    print("Attention Mask:", inputs.attention_mask)
-    
-    outputs = model(**inputs)
-    
-    start_idx = torch.argmax(outputs.start_logits)
-    end_idx = torch.argmax(outputs.end_logits)
-    
-    # Ensure the end index is greater than or equal to the start index
-    if end_idx < start_idx:
-        end_idx = start_idx
-    
-    # Decode the tokens and clean up the response
-    answer_tokens = inputs.input_ids[0][start_idx:end_idx + 1]
-    answer = tokenizer.decode(answer_tokens, skip_special_tokens=True)
-    
-    # Debug: Print the decoded answer
-    print("Decoded Answer:", answer)
-    
-    return answer
+import requests
 
-# Fallback to Gemini API
-def ask_gemini(question, context, preferred_language):
-    if not gemini_api_key:
-        return "Gemini API key is not set. Please provide a valid API key to use this feature."
+def ask_openai(question, context, preferred_language, openai_api_key):
+    if not openai_api_key:
+        return "OpenAI API key is not set. Please provide a valid API key to use this feature."
     
-    url = "https://gemini-api-url.com/v1/ask"  # Update with the actual Gemini API URL
+    url = "https://api.openai.com/v1/chat/completions"  # Updated to the chat model endpoint
     headers = {
-        "Authorization": f"Bearer {gemini_api_key}",
+        "Authorization": f"Bearer {openai_api_key}",
         "Content-Type": "application/json"
     }
+    
+    system_prompt = (
+        "You are a specialized Hebrew-speaking tutor helping students learn Spoken Palestinian Arabic. "
+        "Your primary knowledge source is the collection of provided PDF documents, and you must rely on "
+        "their content for all lessons, explanations, examples, and quizzes.\n\n"
+        "When you respond to the user:\n"
+        "- Refer to the provided PDF content as your primary source of information.\n"
+        "- Do not include outside references or additional details beyond what is in the PDFs, unless explicitly requested.\n"
+        "- Greet and explain in Hebrew, using short, simple sentences.\n"
+        "- When teaching Arabic words or phrases, switch to Spoken Palestinian Arabic and optionally provide transliterations or notes, but base your teachings on the PDF material.\n"
+        "- Provide text-to-speech or audio guidance (when relevant) to help with Arabic pronunciation—again, using words, phrases, and examples directly from the PDFs.\n"
+        "- Offer quizzes, exercises, or practice questions aligned with the vocabulary and grammar topics in the PDFs.\n"
+        "- Answer user questions about the PDF material or about Arabic usage strictly based on the information in the PDFs.\n"
+        "- If the user asks for information not covered in the PDFs, politely let them know that the information is not provided in the material.\n"
+        "- Maintain a warm and encouraging tone—you are a supportive language tutor.\n"
+        "- Provide gentle corrections and constructive feedback to help students progress.\n"
+        "- Ensure that learners stay focused on the material given in the PDFs, mastering the specific vocabulary, grammar points, and examples in those documents.\n"
+        "- Do not introduce outside information or topics unless explicitly asked, and clarify when doing so."
+    )
+    
     payload = {
-        "context": context,
-        "question": question,
-        "language": preferred_language
+        "model": "gpt-4o",  # Use an appropriate OpenAI model
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Question: {question}\nContext: {context}\nPreferred Language: {preferred_language}"}
+        ],
+        "max_tokens": 500,
+        "temperature": 0.5,
+        "n": 1
     }
     
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for HTTP errors
         result = response.json()
-        return result.get("answer", "No answer found.")
+        return result['choices'][0]['message']['content'].strip()
     except requests.exceptions.RequestException as e:
-        print(f"Error using Gemini API: {e}")
-        return "Error fetching response from Gemini API."
+        print(f"Error using OpenAI API: {e}")
+        return "Error fetching response from OpenAI API."
 
 # Transliteration: Arabic → Hebrew
 def transliterate_to_hebrew(text):
@@ -118,6 +110,21 @@ def transliterate_to_english(text):
     english_text = ''.join([transliteration_rules.get(char, char) for char in text])
     return english_text
 
+# Save chat to Excel
+def save_chat_to_excel(chat_data):
+    filename = "chat_history.xlsx"
+    # Check if the file exists
+    if os.path.exists(filename):
+        # Load existing data
+        df = pd.read_excel(filename)
+        # Append new row
+        df = df.append(chat_data, ignore_index=True)
+    else:
+        # Create new DataFrame
+        df = pd.DataFrame([chat_data])
+    # Save to Excel
+    df.to_excel(filename, index=False)
+
 # Route for saving user information
 @app.route("/save_user", methods=["POST"])
 def save_user():
@@ -136,11 +143,7 @@ def ask():
     if context == "No content found for the selected week.":
         return jsonify({"answer": context})
 
-    try:
-        answer = ask_arabert(question, context)
-    except Exception as e:
-        print(f"Error using AraBERT: {e}")
-        answer = ask_gemini(question, context, preferred_language)
+    answer = ask_openai(question, context, preferred_language)
 
     if preferred_language == "arabic":
         response = answer
@@ -150,6 +153,18 @@ def ask():
         response = transliterate_to_english(answer)
     else:
         response = "Invalid language option."
+
+    # Save chat to Excel
+    chat_data = {
+        "Level": level,
+        "Week": week,
+        "Question": question,
+        "Gender": gender,
+        "Preferred Language": preferred_language,
+        "Context": context,
+        "Answer": response
+    }
+    save_chat_to_excel(chat_data)
 
     return jsonify({"answer": response})
 

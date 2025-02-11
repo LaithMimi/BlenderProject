@@ -43,7 +43,7 @@ def add_pdf_to_db(level, week, pdf_path):
 
 # Example: Adding PDFs for each level and week
 for level in ["beginner", "intermediate", "advanced", "expert"]:
-    for week in range(1, 11):
+    for week in range(1, 20):
         pdf_path = f"materials/{level}_week{week:02}.pdf"
         if os.path.exists(pdf_path):
             add_pdf_to_db(level, f"week{week:02}", pdf_path)
