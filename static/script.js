@@ -28,28 +28,25 @@ function savePreferences() {
   document.getElementById("chatContainer").style.display = "flex";
 
   // Display welcome message in the selected language
-  const chatBox = document.getElementById('chat-box');
-  const welcomeMessage = document.createElement('div');
-  welcomeMessage.className = 'chat-message bot-message';
-
-  let welcomeText;
-  switch (userPreferences.language) {
-    case 'arabic':
-      welcomeText = `مرحبًا ${userPreferences.name}! كيف بقدر اساعدك اليوم؟`;
-      break;
-    case 'transliteration-hebrew':
-      welcomeText = `מרחבא ${userPreferences.name}! כיף בקדר אסאעדכ אליום?`;
-      break;
-    case 'transliteration-english':
-      welcomeText = `Marhaba ${userPreferences.name}! Kaif bakdar asadak alyom?`;
-      break;
-    default:
-      welcomeText = `Hello ${userPreferences.name}! How can I help you today?`;
-  }
+  const welcomeText = getWelcomeMessage(userPreferences.language, userPreferences.name);
   appendBotMessage(welcomeText);
 
   // Scroll to bottom of chat box
+  const chatBox = document.getElementById('chat-box');
   chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function getWelcomeMessage(language, name) {
+  switch (language) {
+    case 'arabic':
+      return `مرحبًا ${name}! كيف بقدر اساعدك اليوم؟`;
+    case 'transliteration-hebrew':
+      return `מרחבא ${name}! כיף בקדר אסאעדכ אליום?`;
+    case 'transliteration-english':
+      return `Marhaba ${name}! Kaif bakdar asadak alyom?`;
+    default:
+      return `Hello ${name}! How can I help you today?`;
+  }
 }
 
 // Send message
@@ -59,19 +56,7 @@ function sendMessage() {
   if (!userInput) return;
 
   // Display user message
-  const chatBox = document.getElementById('chat-box');
-  const userMessageDiv = document.createElement('div');
-  userMessageDiv.className = 'chat-message user-message';
-
-  const userTextSpan = document.createElement('span');
-  userTextSpan.className = 'user-text';
-  userTextSpan.textContent = userInput;
-
-  userMessageDiv.appendChild(userTextSpan);
-  chatBox.appendChild(userMessageDiv);
-
-  // Scroll to bottom
-  chatBox.scrollTop = chatBox.scrollHeight;
+  appendUserMessage(userInput);
 
   // Clear input
   userInputElement.value = '';
@@ -85,7 +70,7 @@ function sendMessage() {
       week: userPreferences.week,
       question: userInput,
       gender: userPreferences.gender,
-      language: userPreferences.language // Include the selected language
+      language: userPreferences.language
     })
   })
     .then(response => {
@@ -96,7 +81,8 @@ function sendMessage() {
     })
     .then(data => {
       // Display bot's message
-      appendBotMessage(data.answer); // Use appendBotMessage
+      appendBotMessage(data.answer);
+      const chatBox = document.getElementById('chat-box');
       chatBox.scrollTop = chatBox.scrollHeight;
     })
     .catch(error => {
@@ -104,6 +90,22 @@ function sendMessage() {
       showErrorPopup("Sorry, I couldn't connect to the backend. Please try again later.");
       console.error('Error sending message:', error);
     });
+}
+
+function appendUserMessage(message) {
+  const chatBox = document.getElementById('chat-box');
+  const userMessageDiv = document.createElement('div');
+  userMessageDiv.className = 'chat-message user-message';
+
+  const userTextSpan = document.createElement('span');
+  userTextSpan.className = 'user-text';
+  userTextSpan.textContent = message;
+
+  userMessageDiv.appendChild(userTextSpan);
+  chatBox.appendChild(userMessageDiv);
+
+  // Scroll to bottom
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function appendBotMessage(message) {
@@ -123,18 +125,13 @@ function appendBotMessage(message) {
 function showErrorPopup(message) {
   const errorPopup = document.getElementById('error-popup');
   const errorMessage = document.getElementById('error-message');
-
-  // Set the error message
   errorMessage.textContent = message;
-
-  // Display the popup
   errorPopup.style.display = 'flex';
 }
 
 // Close error popup
 function closeErrorPopup() {
-  const errorPopup = document.getElementById('error-popup');
-  errorPopup.style.display = 'none';
+  document.getElementById('error-popup').style.display = 'none';
 }
 
 // Theme toggle
@@ -190,8 +187,6 @@ loadTheme();
 
 // Function to handle sending message with Enter key
 const chatInput = document.getElementById('user-input');
-const sendButton = document.getElementById('send-button');
-
 chatInput.addEventListener('keypress', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
@@ -200,4 +195,4 @@ chatInput.addEventListener('keypress', (event) => {
 });
 
 // Send message when clicking the send button
-sendButton.addEventListener('click', sendMessage);
+document.getElementById('send-button').addEventListener('click', sendMessage);
