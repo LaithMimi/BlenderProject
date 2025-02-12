@@ -4,16 +4,21 @@ import os
 import requests  # Import requests for OpenAI API calls
 import pandas as pd  
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
 # Load OpenAI API key from environment variable
+load_dotenv()
+
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    print("Warning: OpenAI API key not found. The OpenAI API will not be called.")
-
+    print("Error: OPENAI_API_KEY not found in environment variables.")
+else:
+    print(f"Loaded OpenAI API key: {len(openai_api_key)} characters")
+    
 DATABASE = "materials.db"
 
 def get_db():
@@ -35,13 +40,10 @@ def get_content_by_level_week(level, week):
     result = cursor.fetchone()
     return result[0] if result else "No content found for the selected week."
 
-import requests
-
 def ask_openai(question, context, preferred_language, openai_api_key):
     if not openai_api_key:
         return "OpenAI API key is not set. Please provide a valid API key to use this feature."
     
-    url = "https://api.openai.com/v1/chat/completions"  # Updated to the chat model endpoint
     headers = {
         "Authorization": f"Bearer {openai_api_key}",
         "Content-Type": "application/json"
@@ -67,7 +69,7 @@ def ask_openai(question, context, preferred_language, openai_api_key):
     )
     
     payload = {
-        "model": "gpt-4o",  # Use an appropriate OpenAI model
+        "model": "gpt-4",  # Use an appropriate OpenAI model
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Question: {question}\nContext: {context}\nPreferred Language: {preferred_language}"}
@@ -78,7 +80,7 @@ def ask_openai(question, context, preferred_language, openai_api_key):
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for HTTP errors
         result = response.json()
         return result['choices'][0]['message']['content'].strip()
@@ -111,19 +113,19 @@ def transliterate_to_english(text):
     return english_text
 
 # Save chat to Excel
-def save_chat_to_excel(chat_data):
-    filename = "chat_history.xlsx"
-    # Check if the file exists
-    if os.path.exists(filename):
-        # Load existing data
-        df = pd.read_excel(filename)
-        # Append new row
-        df = df.append(chat_data, ignore_index=True)
-    else:
-        # Create new DataFrame
-        df = pd.DataFrame([chat_data])
-    # Save to Excel
-    df.to_excel(filename, index=False)
+# def save_chat_to_excel(chat_data):
+#     filename = "chat_history.xlsx"
+#     # Check if the file exists
+#     if os.path.exists(filename):
+#         # Load existing data
+#         df = pd.read_excel(filename)
+#         # Append new row
+#         df = df.append(chat_data, ignore_index=True)
+#     else:
+#         # Create new DataFrame
+#         df = pd.DataFrame([chat_data])
+#     # Save to Excel
+#     df.to_excel(filename, index=False)
 
 # Route for saving user information
 @app.route("/save_user", methods=["POST"])
@@ -143,7 +145,7 @@ def ask():
     if context == "No content found for the selected week.":
         return jsonify({"answer": context})
 
-    answer = ask_openai(question, context, preferred_language)
+    answer = ask_openai(question, context, preferred_language, openai_api_key)
 
     if preferred_language == "arabic":
         response = answer
@@ -164,7 +166,7 @@ def ask():
         "Context": context,
         "Answer": response
     }
-    save_chat_to_excel(chat_data)
+    # save_chat_to_excel(chat_data)
 
     return jsonify({"answer": response})
 

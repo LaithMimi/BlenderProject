@@ -76,7 +76,6 @@ function sendMessage() {
   // Clear input
   userInputElement.value = '';
 
-
   // Send the question to the backend
   fetch('/ask', {
     method: 'POST',
@@ -101,13 +100,12 @@ function sendMessage() {
       chatBox.scrollTop = chatBox.scrollHeight;
     })
     .catch(error => {
-
       // Display error message in popup
       showErrorPopup("Sorry, I couldn't connect to the backend. Please try again later.");
-
       console.error('Error sending message:', error);
     });
 }
+
 function appendBotMessage(message) {
   const botMessage = document.createElement('div');
   botMessage.className = 'bot-message';
@@ -190,3 +188,16 @@ document.getElementById("contact-form").addEventListener("submit", function (eve
 // Initialize
 loadTheme();
 
+// Function to handle sending message with Enter key
+const chatInput = document.getElementById('user-input');
+const sendButton = document.getElementById('send-button');
+
+chatInput.addEventListener('keypress', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+});
+
+// Send message when clicking the send button
+sendButton.addEventListener('click', sendMessage);

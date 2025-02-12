@@ -1,5 +1,3 @@
-# Script to process PDFs and populate the database
-# to run the script: python setup_db.py #
 import pdfplumber
 import sqlite3
 import os
