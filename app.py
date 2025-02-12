@@ -69,7 +69,7 @@ def ask_openai(question, context, preferred_language, openai_api_key):
     )
     
     payload = {
-        "model": "gpt-4",  # Use an appropriate OpenAI model
+        "model": "gpt-4o",  # Use an appropriate OpenAI model
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Question: {question}\nContext: {context}\nPreferred Language: {preferred_language}"}
