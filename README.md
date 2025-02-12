@@ -1,7 +1,7 @@
 # BlenderProject
 
 ## Description
-BlenderProject is a Flask web application designed to assist students in learning Spoken Palestinian Arabic with the help of OpenAI's GPT-4 model. This project integrates various technologies including Flask, SQLite, and the OpenAI API.
+BlenderProject is a Flask web application designed to assist students in learning Spoken Arabic with the help of OpenAI's GPT-4 model. This project integrates various technologies including Flask, SQLite, and the OpenAI API.
 
 ## Features
 - Fetch learning materials by level and week from an SQLite database.
