@@ -1,176 +1,223 @@
 from flask import Flask, request, jsonify, render_template, g
 import sqlite3
 import os
-import requests  # Import requests for OpenAI API calls
-import pandas as pd  
+import requests
 from flask_cors import CORS
 from dotenv import load_dotenv
+import logging
+from typing import Optional, Dict  # Removed 'Any'
+from datetime import datetime
 
-# Initialize Flask app
+# Initialize Flask app and logging
 app = Flask(__name__)
 CORS(app)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load OpenAI API key from environment variable
+# Load environment variables
 load_dotenv()
 
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    print("Error: OPENAI_API_KEY not found in environment variables.")
-else:
-    print(f"Loaded OpenAI API key: {len(openai_api_key)} characters")
-    
+# Constants
 DATABASE = "materials.db"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL = "gpt-4"
 
-def get_db():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
-    return g.db
+class DatabaseManager:
+    @staticmethod
+    def get_db():
+        """Retrieve or create a database connection for this request."""
+        if 'db' not in g:
+            g.db = sqlite3.connect(DATABASE)
+            g.db.row_factory = sqlite3.Row
+        return g.db
 
-@app.teardown_appcontext
-def close_db(e=None):
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
+    @staticmethod
+    def close_db(e=None):
+        """Close the database connection at the end of the request."""
+        db = g.pop('db', None)
+        if db is not None:
+            db.close()
 
-# Fetch material by level and week
-def get_content_by_level_week(level, week):
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("SELECT content FROM materials WHERE level = ? AND week = ?", (level, week))
-    result = cursor.fetchone()
-    return result[0] if result else "No content found for the selected week."
+    @staticmethod
+    def get_content_by_level_week(level: int, week: int) -> Optional[str]:
+        """
+        Fetch the 'content' field from the 'materials' table based on the provided level and week.
+        Returns None if no matching record is found or if there's a DB error.
+        """
+        try:
+            db = DatabaseManager.get_db()
+            cursor = db.cursor()
+            cursor.execute(
+                "SELECT content FROM materials WHERE level = ? AND week = ?",
+                (level, week)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+        except sqlite3.Error as e:
+            logger.error(f"Database error: {e}")
+            return None
 
-def ask_openai(question, context, preferred_language, openai_api_key):
-    if not openai_api_key:
-        return "OpenAI API key is not set. Please provide a valid API key to use this feature."
-    
-    headers = {
-        "Authorization": f"Bearer {openai_api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    system_prompt = (
-    "You are a highly interactive and structured Arabic tutor specializing in Spoken Palestinian Arabic for Hebrew-speaking students. "
-    "Your role is to guide users through structured learning with engaging explanations, examples, and interactive exercises with only short answers.\n\n"
-    "When responding:\n"
-    "- no bold font do not use #'s or *'s\n"
-    "- short answers only max 20 word\n"
-    "- Use Preferred Language as your language for general instructions and explanations.\n"
-    "- Teach Arabic vocabulary and phrases in Spoken Arabic.\n"
-    "- always Provide transliterations and pronunciation guidance.\n"
-    "- Offer short quizzes, role-playing dialogues, and interactive exercises only if the user asks.\n"
-    "- Encourage users to practice by asking questions and providing real-life scenarios.\n"
-    "- If a user makes a mistake, correct them gently and explain why.\n"
-    "- Base all teachings on the structured material in the PDFs.\n"
-    "- If a question is outside the provided material, inform the user politely.\n"
-    "- Maintain a supportive and motivating tone to make learning enjoyable.\n"
-    )
-    
-    payload = {
-        "model": "gpt-4o",
-        "messages": [
-            {"role": "system", "content":f"Question: {question}\nContext: {context}\nPreferred Language: {preferred_language}","content": system_prompt},
-            {"role": "user", "content": f"Question: {question}\nContext: {context}\nPreferred Language: {preferred_language}"}
-        ],
-        "max_tokens": 500,
-        "temperature": 0.5,
-        "n": 1
-    }
-    
-    try:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        result = response.json()
-        return result['choices'][0]['message']['content'].strip()
-    except requests.exceptions.RequestException as e:
-        print(f"Error using OpenAI API: {e}")
-        return "Error fetching response from OpenAI API."
+class OpenAIManager:
+    @staticmethod
+    def create_system_prompt() -> str:
+        """
+        Returns an improved system prompt that outlines how the AI should behave
+        as a concise, interactive Arabic tutor for Hebrew-speaking students.
+        """
+        return (
+            "You are an interactive Spoken Arabic tutor specializing in the Palestinian dialect "
+            "for Hebrew-speaking students. Provide short, structured answers (20 words max). "
+            "Use the user's preferred language for instructions and teach Arabic (only spoken Palestinian dialect) with "
+            "transliterations and pronunciation. Offer quizzes or dialogues only if requested. "
+            "Gently correct mistakes with brief explanations. Base teaching on the given material. "
+            "Politely note if content is unavailable and maintain a supportive, engaging tone."
+        )
 
-# Transliteration: Arabic → Hebrew
-def transliterate_to_hebrew(text):
-    transliteration_rules = {
+    @staticmethod
+    def ask_openai(question: str, context: str, preferred_language: str) -> str:
+        """Send a message to the OpenAI API and return the assistant's response."""
+        if not OPENAI_API_KEY:
+            logger.error("OpenAI API key not found")
+            return "Configuration error: OpenAI API key not set"
+
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {"role": "system", "content": OpenAIManager.create_system_prompt()},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Question: {question}\n"
+                        f"Context: {context}\n"
+                        f"Preferred Language: {preferred_language}"
+                    )
+                }
+            ],
+            "max_tokens": 500,
+            "temperature": 0.5
+        }
+
+        try:
+            response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()['choices'][0]['message']['content'].strip()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OpenAI API error: {e}")
+            return "Error: Unable to get response from OpenAI"
+
+class TransliterationManager:
+    """Handles transliteration from Arabic to Hebrew or English."""
+    ARABIC_TO_HEBREW = {
         "ا": "א", "ب": "ב", "ت": "ת", "ث": "ת'", "ج": "ג", "ح": "ח", "خ": "כ'",
         "د": "ד", "ذ": "ד'", "ر": "ר", "ز": "ז", "س": "ס", "ش": "ש", "ص": "צ",
         "ض": "צ'", "ط": "ט", "ظ": "ט'", "ع": "ע", "غ": "ע'", "ف": "פ", "ق": "ק",
         "ك": "כ", "ل": "ל", "م": "מ", "ن": "נ", "ه": "ה", "و": "ו", "ي": "י",
         "ء": "'", "ئ": "'", "ى": "י", "ة": "ה"
     }
-    hebrew_text = ''.join([transliteration_rules.get(char, char) for char in text])
-    return hebrew_text
 
-# Transliteration: Arabic → English
-def transliterate_to_english(text):
-    transliteration_rules = {
+    ARABIC_TO_ENGLISH = {
         "ا": "a", "ب": "b", "ت": "t", "ث": "th", "ج": "j", "ح": "h", "خ": "kh",
         "د": "d", "ذ": "dh", "ر": "r", "ز": "z", "س": "s", "ش": "sh", "ص": "s",
         "ض": "d", "ط": "t", "ظ": "th", "ع": "a'", "غ": "gh", "ف": "f", "ق": "q",
         "ك": "k", "ل": "l", "م": "m", "ن": "n", "ه": "h", "و": "w", "ي": "y",
         "ء": "'", "ئ": "i", "ى": "a", "ة": "h"
     }
-    english_text = ''.join([transliteration_rules.get(char, char) for char in text])
-    return english_text
 
-# Save chat to Excel
-# def save_chat_to_excel(chat_data):
-#     filename = "chat_history.xlsx"
-#     # Check if the file exists
-#     if os.path.exists(filename):
-#         # Load existing data
-#         df = pd.read_excel(filename)
-#         # Append new row
-#         df = df.append(chat_data, ignore_index=True)
-#     else:
-#         # Create new DataFrame
-#         df = pd.DataFrame([chat_data])
-#     # Save to Excel
-#     df.to_excel(filename, index=False)
+    @staticmethod
+    def transliterate(text: str, rules: Dict[str, str]) -> str:
+        """Transliterate the given text based on the provided rules dictionary."""
+        return ''.join(rules.get(char, char) for char in text)
 
-# Route for saving user information
+# Register the database close function
+app.teardown_appcontext(DatabaseManager.close_db)
+
 @app.route("/save_user", methods=["POST"])
 def save_user():
-    user_data = request.json
-    return jsonify({"message": "User data received!", "data": user_data})
+    """
+    Handle user data, attach a timestamp, and return a success JSON response.
+    """
+    try:
+        user_data = request.get_json()
+        if not user_data:
+            return jsonify({"error": "No data provided"}), 400
 
-# API Endpoint
+        user_data['timestamp'] = datetime.utcnow().isoformat()
+
+        return jsonify({
+            "status": "success",
+            "message": "User data received",
+            "data": user_data
+        })
+    except Exception as e:
+        logger.error(f"Error saving user data: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
 @app.route("/ask", methods=["POST"])
 def ask():
-    data = request.json
-    level, week, question, gender, preferred_language = (
-        data["level"], data["week"], data["question"], data["gender"], data["language"]
-    )
+    """
+    Main route for handling user questions:
+      1. Validates input
+      2. Fetches context from DB
+      3. Queries OpenAI
+      4. Transliterates response if necessary
+      5. Returns JSON result
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
 
-    context = get_content_by_level_week(level, week)
-    if context == "No content found for the selected week.":
-        return jsonify({"answer": context})
+        required_fields = ["level", "week", "question", "gender", "language"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
 
-    answer = ask_openai(question, context, preferred_language, openai_api_key)
+        # Get content for the specified level and week
+        context = DatabaseManager.get_content_by_level_week(data["level"], data["week"])
+        if not context:
+            return jsonify({"error": "No content found for the selected week"}), 404
 
-    if preferred_language == "arabic":
-        response = answer
-    elif preferred_language == "transliteration-hebrew":
-        response = transliterate_to_hebrew(answer)
-    elif preferred_language == "transliteration-english":
-        response = transliterate_to_english(answer)
-    else:
-        response = "Invalid language option."
+        # Get response from OpenAI
+        answer = OpenAIManager.ask_openai(data["question"], context, data["language"])
 
-    # Save chat to Excel
-    chat_data = {
-        "Level": level,
-        "Week": week,
-        "Question": question,
-        "Gender": gender,
-        "Preferred Language": preferred_language,
-        "Context": context,
-        "Answer": response
-    }
-    # save_chat_to_excel(chat_data)
+        # Handle transliteration based on preferred language
+        if data["language"] == "arabic":
+            response = answer
+        elif data["language"] == "transliteration-hebrew":
+            response = TransliterationManager.transliterate(
+                answer, TransliterationManager.ARABIC_TO_HEBREW
+            )
+        elif data["language"] == "transliteration-english":
+            response = TransliterationManager.transliterate(
+                answer, TransliterationManager.ARABIC_TO_ENGLISH
+            )
+        else:
+            return jsonify({"error": "Invalid language option"}), 400
 
-    return jsonify({"answer": response})
+        return jsonify({
+            "status": "success",
+            "answer": response,
+            "metadata": {
+                "level": data["level"],
+                "week": data["week"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        })
 
-# Serve Frontend
+    except Exception as e:
+        logger.error(f"Error processing request: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
 @app.route("/")
 def home():
+    """
+    Simple home route to render an index page (if exists).
+    """
     return render_template("index.html")
 
 if __name__ == "__main__":
