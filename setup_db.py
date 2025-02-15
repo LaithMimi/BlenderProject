@@ -1,22 +1,37 @@
-import pdfplumber
-import sqlite3
 import os
+import pdfplumber
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
 
-# Connect to SQLite database
-conn = sqlite3.connect("materials.db")
-cursor = conn.cursor()
+# Path to Secure Connect Bundle (Replace with your actual path)
+ASTRA_DB_BUNDLE_PATH = "./secure-connect-database_name.zip"
 
-# Create a table for teaching materials
-cursor.execute("""
+# Configure the database connection
+cloud_config = {'secure_connect_bundle': ASTRA_DB_BUNDLE_PATH}
+cluster = Cluster(cloud=cloud_config)
+session = cluster.connect()
+
+# Set the keyspace
+KEYSPACE = "arabic_learning"
+session.set_keyspace(KEYSPACE)
+
+# Folder containing PDFs
+PDF_FOLDER = "pdfs"  # Update with your actual PDF folder
+
+# Function to create necessary table
+def create_tables():
+    query = """
     CREATE TABLE IF NOT EXISTS materials (
-        id INTEGER PRIMARY KEY,
+        id UUID PRIMARY KEY,
         level TEXT,
         week TEXT,
         content TEXT
-    )
-""")
+    );
+    """
+    session.execute(query)
+    print("✅ Table 'materials' created successfully!")
 
-# Function to extract text from PDFs
+# Function to extract text from a PDF file
 def extract_text_from_pdf(pdf_path):
     text = ""
     try:
@@ -24,30 +39,44 @@ def extract_text_from_pdf(pdf_path):
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text
+                    text += page_text + "\n"
     except Exception as e:
-        print(f"Error reading {pdf_path}: {e}")
-    return text
+        print(f"❌ Error reading {pdf_path}: {e}")
+    return text.strip()
 
-# Add PDFs to the database
-def add_pdf_to_db(level, week, pdf_path):
-    content = extract_text_from_pdf(pdf_path)
-    if content:
-        cursor.execute("INSERT INTO materials (level, week, content) VALUES (?, ?, ?)", (level, week, content))
-        conn.commit()
-        print(f"Added {pdf_path} to database.")
-    else:
-        print(f"No content extracted from {pdf_path}")
+# Function to upload PDFs to Astra DB
+def upload_pdfs():
+    if not os.path.exists(PDF_FOLDER):
+        print(f"❌ Folder '{PDF_FOLDER}' not found!")
+        return
 
-# Example: Adding PDFs for each level and week
-for level in ["beginner", "intermediate", "advanced", "expert"]:
-    for week in range(1, 20):
-        pdf_path = f"materials/{level}_week{week:02}.pdf"
-        if os.path.exists(pdf_path):
-            add_pdf_to_db(level, f"week{week:02}", pdf_path)
-        else:
-            print(f"File {pdf_path} does not exist.")
+    for filename in os.listdir(PDF_FOLDER):
+        if filename.endswith(".pdf"):
+            pdf_path = os.path.join(PDF_FOLDER, filename)
 
-# Close the database connection
-conn.close()
-print("PDF content added to the database!")
+            # Extract level and week from filename
+            parts = filename.replace(".pdf", "").split("_")  # Example: beginner_week01.pdf
+            if len(parts) < 2:
+                print(f"❌ Skipping invalid file: {filename}")
+                continue
+            
+            level = parts[0].lower()
+            week = parts[1].lower()
+            
+            # Extract text from PDF
+            content = extract_text_from_pdf(pdf_path)
+
+            if content:
+                query = """
+                INSERT INTO materials (id, level, week, content) 
+                VALUES (uuid(), %s, %s, %s)
+                """
+                session.execute(query, (level, week, content))
+                print(f"✅ Uploaded {filename} to Astra DB.")
+            else:
+                print(f"❌ No content extracted from {filename}")
+
+# Run setup
+if __name__ == "__main__":
+    create_tables()
+    upload_pdfs()

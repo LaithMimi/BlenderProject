@@ -21,7 +21,7 @@ load_dotenv()
 DATABASE = "materials.db"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = "gpt-4"
+OPENAI_MODEL = "gpt-4o"
 
 class DatabaseManager:
     @staticmethod
@@ -216,7 +216,7 @@ def ask():
 @app.route("/")
 def home():
     """
-    Simple home route to render an index page (if exists).
+    Render the main index page
     """
     return render_template("index.html")
 
