@@ -21,7 +21,7 @@ load_dotenv()
 DATABASE = "materials.db"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = "gpt-4o"
+OPENAI_MODEL = "gpt-4"
 
 class DatabaseManager:
     @staticmethod
@@ -40,7 +40,7 @@ class DatabaseManager:
             db.close()
 
     @staticmethod
-    def get_content_by_level_week(level: int, week: int) -> Optional[str]:
+    def get_content_by_level_week(level: str, week: str) -> Optional[str]:
         """
         Fetch the 'content' field from the 'materials' table based on the provided level and week.
         Returns None if no matching record is found or if there's a DB error.
@@ -66,11 +66,12 @@ class OpenAIManager:
         as a concise, interactive Arabic tutor for Hebrew-speaking students.
         """
         return (
-            "You are an interactive Spoken Arabic tutor specializing in the Palestinian dialect "
-            "for Hebrew-speaking students. Provide short, structured answers (20 words max). "
-            "Use the user's preferred language for instructions and teach Arabic (only spoken Palestinian dialect) with "
-            "transliterations and pronunciation. Offer quizzes or dialogues only if requested. "
-            "Gently correct mistakes with brief explanations. Base teaching on the given material. "
+            "You are an interactive Spoken Palestinian dialect Arabic tutor"
+            "for Hebrew-speaking students. "
+            "do not use # or any other special characters in the response and after every sentence add a new line "
+            "Use the user's preferred language for instructions and teach ONLYspoken Palestinian dialect"
+            "transliterations and pronunciation. Offer quizzes or dialogues only if requested "
+            "Gently correct mistakes with brief explanations. Base teaching ONLY on the given material"
             "Politely note if content is unavailable and maintain a supportive, engaging tone."
         )
 
@@ -99,8 +100,8 @@ class OpenAIManager:
                     )
                 }
             ],
-            "max_tokens": 500,
-            "temperature": 0.5
+            "max_tokens": 800,
+            "temperature": 0.8
         }
 
         try:

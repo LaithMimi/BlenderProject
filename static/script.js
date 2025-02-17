@@ -83,6 +83,7 @@ function sendMessage() {
       // Display bot's message
       appendBotMessage(data.answer);
       const chatBox = document.getElementById('chat-box');
+      chatBox.setAttribute('dir', data.language === 'arabic' ? 'rtl' : 'ltr');
       chatBox.scrollTop = chatBox.scrollHeight;
     })
     .catch(error => {
