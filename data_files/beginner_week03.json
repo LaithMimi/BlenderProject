@@ -1,0 +1,102 @@
+{
+    "lesson": "Beginner - Week 3",
+    "greetings": {
+      "arabic": [
+        "مَرْحَبَا",
+        "مَرْحَبْتِين"
+      ],
+      "hebrew": [
+        "מַרְחַבַּא",
+        "מַרְחַבְּתֵין"
+      ],
+      "english": [
+        "Hello",
+        "Hello (double greeting)"
+      ]
+    },
+    "birthday_wishes": {
+      "arabic": [
+        "كُلّ سَنِة وإِنْتِ سَالْمِة",
+        "عِيد مِيلاَد سَعِيد",
+        "العُمُر كُلُّه ياَ نوُر",
+        "سْنِين الهَنَا"
+      ],
+      "hebrew": [
+        "כֻּל סַנֵה ואִּנְתִ סַאלְמֵה",
+        "עִיד מִילַאד סַעִיד",
+        "אֵלְעֻמְר כֻּלּוֹ יאַ נוּר",
+        "סְנִין (א)לְהַנַא"
+      ],
+      "english": [
+        "May you have a happy year",
+        "Happy Birthday",
+        "Wishing you a long life, Noor",
+        "Years of happiness"
+      ]
+    },
+    "days_of_week": {
+      "arabic": {
+        "Sunday": "يوُم الأحَد",
+        "Monday": "يوُم الإثْنَيْن",
+        "Tuesday": "يوُم الثُّلَاثَاء",
+        "Wednesday": "يوُم الأرْبِعَاء",
+        "Thursday": "يوُم الخمَِيس",
+        "Friday": "يوُم الجمُْعَة",
+        "Saturday": "يوُم السَّبْت"
+      },
+      "hebrew": {
+        "Sunday": "יוׂם (א)לְאַחַד",
+        "Monday": "יוׂם אֵלִתְֿנֵין",
+        "Tuesday": "יוׂם אֵ(ל)תַֿ׳לַאתַ׳א",
+        "Wednesday": "יוׂם (א)לְאַרְבְּעַא",
+        "Thursday": "יוׂם (א)לְחַ׳מִיס",
+        "Friday": "יוׂם (א)לְגֻ'מְעַה",
+        "Saturday": "יוׂם (א)לְסַֿבְּת"
+      },
+      "english": {
+        "Sunday": "Sunday",
+        "Monday": "Monday",
+        "Tuesday": "Tuesday",
+        "Wednesday": "Wednesday",
+        "Thursday": "Thursday",
+        "Friday": "Friday",
+        "Saturday": "Saturday"
+      }
+    },
+    "seasons": {
+      "arabic": {
+        "Autumn": "فَصْل الْخرَيِف",
+        "Spring": "فَصْل الرَّبيِع",
+        "Winter": "فَصْل الشِّتَاء",
+        "Summer": "فَصْل الصَّيْف"
+      },
+      "hebrew": {
+        "Autumn": "פַצְל (א)לְחַ׳רִיף",
+        "Spring": "פַצְל אֵ(ל)רַֿבִּיע",
+        "Winter": "פַצְל אֵ(ל)שִֿתַאא",
+        "Summer": "פַצְל אֵ(ל)צֵֿיף"
+      },
+      "english": {
+        "Autumn": "Autumn",
+        "Spring": "Spring",
+        "Winter": "Winter",
+        "Summer": "Summer"
+      }
+    },
+    "writing_exercise": {
+      "instructions": "Write the following sentences in Arabic script:",
+      "sentences": [
+        "I am from Jaffa (يَافَا)",
+        "I am from Haifa (حَيْفَا)",
+        "Suzan is from France (سُوزَان مِن فَرَنْسَا)",
+        "Oh, Mom! (يَا مَامَا)"
+      ]
+    },
+    "homework": [
+      "Complete reading exercise and record yourself in the WhatsApp group.",
+      "Review writing exercises.",
+      "Record yourself discussing your favorite season and birthday season.",
+      "Write which day you like the most and when your birthday falls."
+    ]
+  }
+  

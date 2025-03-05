@@ -1,225 +1,276 @@
-from flask import Flask, request, jsonify, render_template, g
-import sqlite3
 import os
-import requests
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
 import logging
-from typing import Optional, Dict  # Removed 'Any'
-from datetime import datetime
+from openai import OpenAI
+from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
+import numpy as np
 
-# Initialize Flask app and logging
-app = Flask(__name__)
-CORS(app)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+ 
+# TODO: add logs for users chat data, only admin can see it
+# TODO: integrate an API from DataStax/Milvus to store your data in it
+
+# TODO: make the material in JSON fromat and store it in the database
+# TODO: refine the assistant's responses to be more accurate and helpful
+
+# ISSUE: the responses are not correct 
+# ISSUE: Assitant -API- is not as expected,
+#           found that the ChatGPT isn't well,
+#                Gemini asstitant is better for now
 
 # Load environment variables
 load_dotenv()
 
-# Constants
-DATABASE = "materials.db"
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = "gpt-4"
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
 
-class DatabaseManager:
-    @staticmethod
-    def get_db():
-        """Retrieve or create a database connection for this request."""
-        if 'db' not in g:
-            g.db = sqlite3.connect(DATABASE)
-            g.db.row_factory = sqlite3.Row
-        return g.db
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    @staticmethod
-    def close_db(e=None):
-        """Close the database connection at the end of the request."""
-        db = g.pop('db', None)
-        if db is not None:
-            db.close()
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    @staticmethod
-    def get_content_by_level_week(level: str, week: str) -> Optional[str]:
-        """
-        Fetch the 'content' field from the 'materials' table based on the provided level and week.
-        Returns None if no matching record is found or if there's a DB error.
-        """
-        try:
-            db = DatabaseManager.get_db()
-            cursor = db.cursor()
-            cursor.execute(
-                "SELECT content FROM materials WHERE level = ? AND week = ?",
-                (level, week)
-            )
-            result = cursor.fetchone()
-            return result[0] if result else None
-        except sqlite3.Error as e:
-            logger.error(f"Database error: {e}")
-            return None
-
-class OpenAIManager:
-    @staticmethod
-    def create_system_prompt() -> str:
-        """
-        Returns an improved system prompt that outlines how the AI should behave
-        as a concise, interactive Arabic tutor for Hebrew-speaking students.
-        """
-        return (
-            "You are an interactive Spoken Palestinian dialect Arabic tutor"
-            "for Hebrew-speaking students. "
-            "do not use # or any other special characters in the response and after every sentence add a new line "
-            "Use the user's preferred language for instructions and teach ONLYspoken Palestinian dialect"
-            "transliterations and pronunciation. Offer quizzes or dialogues only if requested "
-            "Gently correct mistakes with brief explanations. Base teaching ONLY on the given material"
-            "Politely note if content is unavailable and maintain a supportive, engaging tone."
+# Milvus Connection and Collection Setup
+def setup_milvus_collection(collection_name):
+    """
+    Create Milvus collection if it doesn't exist
+    """
+    try:
+        connections.connect(
+            alias="default", 
+            host=os.getenv("MILVUS_HOST", "localhost"),
+            port=os.getenv("MILVUS_PORT", "19530")
         )
+        logger.info("Successfully connected to Milvus!")
 
-    @staticmethod
-    def ask_openai(question: str, context: str, preferred_language: str) -> str:
-        """Send a message to the OpenAI API and return the assistant's response."""
-        if not OPENAI_API_KEY:
-            logger.error("OpenAI API key not found")
-            return "Configuration error: OpenAI API key not set"
-
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {"role": "system", "content": OpenAIManager.create_system_prompt()},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Question: {question}\n"
-                        f"Context: {context}\n"
-                        f"Preferred Language: {preferred_language}"
-                    )
-                }
-            ],
-            "max_tokens": 800,
-            "temperature": 0.8
-        }
-
-        try:
-            response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
-            response.raise_for_status()
-            return response.json()['choices'][0]['message']['content'].strip()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"OpenAI API error: {e}")
-            return "Error: Unable to get response from OpenAI"
-
-class TransliterationManager:
-    """Handles transliteration from Arabic to Hebrew or English."""
-    ARABIC_TO_HEBREW = {
-        "ا": "א", "ب": "ב", "ت": "ת", "ث": "ת'", "ج": "ג", "ح": "ח", "خ": "כ'",
-        "د": "ד", "ذ": "ד'", "ر": "ר", "ز": "ז", "س": "ס", "ش": "ש", "ص": "צ",
-        "ض": "צ'", "ط": "ט", "ظ": "ט'", "ع": "ע", "غ": "ע'", "ف": "פ", "ق": "ק",
-        "ك": "כ", "ل": "ל", "م": "מ", "ن": "נ", "ه": "ה", "و": "ו", "ي": "י",
-        "ء": "'", "ئ": "'", "ى": "י", "ة": "ה"
-    }
-
-    ARABIC_TO_ENGLISH = {
-        "ا": "a", "ب": "b", "ت": "t", "ث": "th", "ج": "j", "ح": "h", "خ": "kh",
-        "د": "d", "ذ": "dh", "ر": "r", "ز": "z", "س": "s", "ش": "sh", "ص": "s",
-        "ض": "d", "ط": "t", "ظ": "th", "ع": "a'", "غ": "gh", "ف": "f", "ق": "q",
-        "ك": "k", "ل": "l", "م": "m", "ن": "n", "ه": "h", "و": "w", "ي": "y",
-        "ء": "'", "ئ": "i", "ى": "a", "ة": "h"
-    }
-
-    @staticmethod
-    def transliterate(text: str, rules: Dict[str, str]) -> str:
-        """Transliterate the given text based on the provided rules dictionary."""
-        return ''.join(rules.get(char, char) for char in text)
-
-# Register the database close function
-app.teardown_appcontext(DatabaseManager.close_db)
-
-@app.route("/save_user", methods=["POST"])
-def save_user():
-    """
-    Handle user data, attach a timestamp, and return a success JSON response.
-    """
-    try:
-        user_data = request.get_json()
-        if not user_data:
-            return jsonify({"error": "No data provided"}), 400
-
-        user_data['timestamp'] = datetime.utcnow().isoformat()
-
-        return jsonify({
-            "status": "success",
-            "message": "User data received",
-            "data": user_data
-        })
-    except Exception as e:
-        logger.error(f"Error saving user data: {e}")
-        return jsonify({"error": "Internal server error"}), 500
-
-@app.route("/ask", methods=["POST"])
-def ask():
-    """
-    Main route for handling user questions:
-      1. Validates input
-      2. Fetches context from DB
-      3. Queries OpenAI
-      4. Transliterates response if necessary
-      5. Returns JSON result
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        required_fields = ["level", "week", "question", "gender", "language"]
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
-
-        # Get content for the specified level and week
-        context = DatabaseManager.get_content_by_level_week(data["level"], data["week"])
-        if not context:
-            return jsonify({"error": "No content found for the selected week"}), 404
-
-        # Get response from OpenAI
-        answer = OpenAIManager.ask_openai(data["question"], context, data["language"])
-
-        # Handle transliteration based on preferred language
-        if data["language"] == "arabic":
-            response = answer
-        elif data["language"] == "transliteration-hebrew":
-            response = TransliterationManager.transliterate(
-                answer, TransliterationManager.ARABIC_TO_HEBREW
-            )
-        elif data["language"] == "transliteration-english":
-            response = TransliterationManager.transliterate(
-                answer, TransliterationManager.ARABIC_TO_ENGLISH
-            )
-        else:
-            return jsonify({"error": "Invalid language option"}), 400
-
-        return jsonify({
-            "status": "success",
-            "answer": response,
-            "metadata": {
-                "level": data["level"],
-                "week": data["week"],
-                "timestamp": datetime.utcnow().isoformat()
+        # Check if collection exists, create if not
+        if not utility.has_collection(collection_name):
+            # Define collection schema
+            fields = [
+                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+                FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
+                FieldSchema(name="dialect", dtype=DataType.VARCHAR, max_length=50),
+                FieldSchema(name="week", dtype=DataType.VARCHAR, max_length=20),
+                FieldSchema(name="topic", dtype=DataType.VARCHAR, max_length=100)
+            ]
+            schema = CollectionSchema(fields=fields, description=f"{collection_name} collection")
+            
+            # Create collection
+            collection = Collection(name=collection_name, schema=schema)
+            
+            # Create index
+            index_params = {
+                "metric_type": "COSINE",
+                "index_type": "IVF_FLAT",
+                "params": {"nlist": 1024}
             }
-        })
-
+            collection.create_index(field_name="embedding", index_params=index_params)
+            logger.info(f"Created collection {collection_name}")
+        
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        logger.error(f"Milvus setup failed: {e}")
+        raise
 
-@app.route("/")
+# Define collections for different levels
+LEVEL_COLLECTIONS = {
+    "beginner": "arabic_beginner",
+    "intermediate": "arabic_intermediate", 
+    "advanced": "arabic_advanced",
+    "expert": "arabic_expert"
+}
+
+# Setup collections on startup
+for collection_name in LEVEL_COLLECTIONS.values():
+    setup_milvus_collection(collection_name)
+
+def get_relevant_materials(level, week, question):
+    """
+    Retrieve relevant teaching materials with improved error handling and logging
+    """
+    try:
+        collection_name = LEVEL_COLLECTIONS.get(level, LEVEL_COLLECTIONS["beginner"])
+        collection = Collection(collection_name)
+        collection.load()
+        
+        # Add timeout and retry mechanism
+        try:
+            embedding_response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=question
+            )
+        except Exception as embed_error:
+            logger.warning(f"Embedding generation failed: {embed_error}")
+            # Fallback embedding generation or default vector
+            query_vector = [0.0] * 1536  
+        
+        query_vector = embedding_response.data[0].embedding
+        
+        # Enhanced search parameters with fallback
+        search_params = {
+            "metric_type": "COSINE",
+            "params": {"nprobe": 10}
+        }
+        
+        # More robust filtering
+        expr = f'week == "{week}"' if week and week.lower() != "all" else None
+        
+        try:
+            results = collection.search(
+                data=[query_vector],
+                anns_field="embedding",
+                param=search_params,
+                limit=5,
+                expr=expr,
+                output_fields=["content", "dialect", "week", "topic"]
+            )
+        except Exception as search_error:
+            logger.error(f"Vector search failed: {search_error}")
+            return []
+        
+        # Comprehensive result processing with validation
+        materials = []
+        for hits in results:
+            for hit in hits:
+                try:
+                    material = {
+                        "content": hit.entity.get("content", ""),
+                        "dialect": hit.entity.get("dialect", "Unknown"),
+                        "week": hit.entity.get("week", "Unspecified"),
+                        "topic": hit.entity.get("topic", "General"),
+                        "similarity": hit.score
+                    }
+                    materials.append(material)
+                except Exception as parsing_error:
+                    logger.warning(f"Material parsing error: {parsing_error}")
+        
+        return materials
+    
+    except Exception as e:
+        logger.critical(f"Catastrophic error in material retrieval: {e}")
+        return []
+    
+def create_arabic_teaching_prompt(level, week, question, gender, language, materials):
+    """
+    Create a detailed prompt for the AI to teach Arabic effectively.
+    """
+    # Base prompt instructing the AI on how to teach
+    base_prompt = f"""
+    You are an expert Arabic language tutor specializing in teaching spoken dialect Levant. 
+    Your name is 'Arabic Tutor' and your primary goal is to help students learn 
+    authentic spoken Levant Arabic in a conversational, practical way.
+    
+    Current student profile:
+    - Level: {level}
+    - Week of study: {week}
+    - Gender: {gender}
+    - Preferred language: {language}
+    
+    IMPORTANT TEACHING GUIDELINES:
+    
+    1. AUTHENTICITY: Always teach natural, authentic spoken Arabic as used by natives - not formal MSA.
+       Focus on practical, everyday expressions that locals actually use.
+       
+    2. PERSONALIZATION: Adapt your teaching to the student's level and progress (week {week} of their {level} level).
+       For beginners, use more of their preferred language. For advanced students, use more Hebrew.
+       
+    3. CULTURAL CONTEXT: Include cultural notes that help explain why certain phrases are used in specific contexts.
+       
+    4. TEACHING APPROACH:
+       - For grammar questions: Explain simply with examples, not abstract rules.
+       - For vocabulary: Provide example sentences showing practical usage.
+       - For pronunciation: Use phonetic transliteration when helpful.
+       - For practice: Create mini-dialogues the student can use in real life.
+       
+    5. RESPONSE FORMAT:
+       - If the student writes in their native language, respond primarily in that language with Arabic examples.
+       - If the student attempts to write in Arabic, praise their effort and gently correct if needed.
+       - Always provide both Arabic script and  תמלול (based on their language preference).
+       - For {gender} students, use appropriate gendered forms in Arabic examples.
+    """
+    
+    # Add relevant materials from the vector DB to the prompt
+    materials_prompt = "\nREFERENCE MATERIALS FOR THIS QUESTION:\n"
+    
+    for i, material in enumerate(materials, 1):
+        materials_prompt += f"""
+        Material {i}:
+        - Topic: {material.get('topic', 'General Arabic')}
+        - Dialect: {material.get('dialect', 'Levantine')}
+        - Week relevance: {material.get('week', 'N/A')}
+        - Content: {material.get('content', '')}
+        """
+    
+    # Add language formatting guidance based on the user's choice
+    if language == "arabic":
+        language_guidance = "\nRespond primarily in Arabic script with minimal explanations in Hebrew.\n"
+    elif language == "transliteration-hebrew":
+        language_guidance = "\nProvide Arabic responses written in Hebrew characters, plus brief Hebrew explanations.\n"
+    elif language == "transliteration-english":
+        language_guidance = "\nProvide Arabic responses with English transliteration, plus Hebrew explanations.\n"
+    else:  # default English
+        language_guidance = "\nProvide responses mainly in Hebrew, with Arabic phrases in both Arabic script and Hebrew transliteration.\n"
+    
+    complete_prompt = base_prompt + materials_prompt + language_guidance
+    return complete_prompt
+
+@app.route('/ask', methods=['POST'])
+def ask():
+    try:
+        data = request.json
+        
+        # Extract request parameters
+        level = data.get('level', 'beginner')
+        week = data.get('week', 'week01')
+        question = data.get('question', '')
+        gender = data.get('gender', 'male')
+        language = data.get('language', 'english')
+        
+        # Retrieve relevant teaching materials
+        teaching_materials = get_relevant_materials(level, week, question)
+        
+        # Create prompt for OpenAI
+        prompt = create_arabic_teaching_prompt(
+            level, 
+            week, 
+            question, 
+            gender, 
+            language, 
+            teaching_materials
+        )
+        
+        # Call ChatGPT API
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": question}
+            ],
+            temperature=0.2,
+            max_tokens=1000
+        )
+        
+        answer = response.choices[0].message.content
+        
+        # Determine text direction
+        text_direction = 'rtl' if language == 'arabic' else 'ltr'
+        
+        return jsonify({
+            "answer": answer,
+            "language": language,
+            "direction": 'ltr'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in /ask endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/')
 def home():
-    """
-    Render the main index page
-    """
-    return render_template("index.html")
+    return render_template('index.html')
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

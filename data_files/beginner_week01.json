@@ -1,0 +1,75 @@
+{
+    "lesson": "Beginner - Week 1",
+    "greetings": {
+      "arabic": [
+        "أهْلاً وسَهْلاً فِيكمُ",
+        "مَرْحَبَا",
+        "مَرْحَبْتِين"
+      ],
+      "hebrew": [
+        "אַהְלןַ וּסַהְלןַ פִיכּםֹ",
+        "מַרְחַבַּא",
+        "מַרְחַבְּתֵין"
+      ],
+      "english": [
+        "Hello and welcome",
+        "Hello",
+        "Hello (double greeting)"
+      ]
+    },
+    "questions": {
+      "name": {
+        "arabic": "شو اسمك؟",
+        "hebrew": "שוּ אִסְמַכּ?",
+        "english": "What is your name?"
+      },
+      "location": {
+        "arabic": "وين انت ساكن؟",
+        "hebrew": "וֵין אִנתְַ סַאכֵּן?",
+        "english": "Where do you live?"
+      },
+      "age": {
+        "arabic": "قديش عمرك؟",
+        "hebrew": "קַדֵֿיש עֻמְרַכּ?",
+        "english": "How old are you?"
+      }
+    },
+    "examples": {
+      "name": {
+        "arabic": "أنا اسمي جلعاد",
+        "hebrew": "אָנַא אִסְמִי גלעד",
+        "english": "My name is Gilad"
+      },
+      "location": {
+        "arabic": "أنا ساكن في القدس",
+        "hebrew": "אָנַא סַאכֵּן פִי (א)לְקֻדְס",
+        "english": "I live in Jerusalem"
+      },
+      "age": {
+        "arabic": "أنا عمري 24 سنة",
+        "hebrew": "אָנַא עֻמְרִי 24 סַנֵה",
+        "english": "I am 24 years old"
+      }
+    },
+    "numbers": {
+      "arabic": {
+        "1": "واحد",
+        "10": "عشرة",
+        "20": "عشرين",
+        "30": "ثلاثين"
+      },
+      "hebrew": {
+        "1": "ואַחַד",
+        "10": "עַשַרַה",
+        "20": "עִשְרִין",
+        "30": "תַלַאתִין"
+      },
+      "english": {
+        "1": "one",
+        "10": "ten",
+        "20": "twenty",
+        "30": "thirty"
+      }
+    }
+  }
+  

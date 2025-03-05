@@ -1,0 +1,83 @@
+{
+    "lesson": "Beginner - Week 2",
+    "greetings": {
+      "arabic": [
+        "مَرْحَبَا",
+        "مَرْحَبْتِين"
+      ],
+      "hebrew": [
+        "מַרְחַבַּא",
+        "מַרְחַבְּתֵין"
+      ],
+      "english": [
+        "Hello",
+        "Hello (double greeting)"
+      ]
+    },
+    "questions": {
+      "children": {
+        "arabic": "عِنْدَك وُلاَد؟",
+        "hebrew": "עִנְדַכּ ולַּאד?",
+        "english": "Do you have children?"
+      },
+      "family_health": {
+        "arabic": "كيف أهلك؟ كيف إمّك؟ كيف أبوك؟",
+        "hebrew": "יף אַהְלַכּ? יף אִמֵּֿכּ? יף אַבּוכִּ?",
+        "english": "How is your family? How is your mother? How is your father?"
+      }
+    },
+    "responses": {
+      "general": {
+        "arabic": "الحمد لله تمام",
+        "hebrew": "אֵלְחַמְדֻלִלַֿ תַמַאם",
+        "english": "Thanks be to God, all is well"
+      },
+      "children": {
+        "arabic": "أيْوَة, عِنْدِي خَمْس وُلاَد",
+        "hebrew": "אַיְוַה, עִנְדִי חַ’מְס וּלַאד",
+        "english": "Yes, I have five children"
+      }
+    },
+    "politeness_expressions": {
+      "arabic": [
+        "الله يخِلَِّي لكَ إيَّاهُم",
+        "يسِْلمَُوا إيدِيك",
+        "الله يعَْطِيك العَافْيِة"
+      ],
+      "hebrew": [
+        "אַללָה יִחַ'לִّילַכּ אִיָאהֻם",
+        "יִסְלַמוּ אִידֵיכּ",
+        "אַללָה יַעַטִיכּ אַלְעַאפְיֵה"
+      ],
+      "english": [
+        "May God keep them for you",
+        "Bless your hands",
+        "May God grant you good health"
+      ]
+    },
+    "daily_greetings": {
+      "arabic": {
+        "morning": "صَبَاح الخِير",
+        "morning_response": "صَبَاح النُّور",
+        "evening": "مَسَاء الخِير",
+        "evening_response": "مَسَاء النُّور"
+      },
+      "hebrew": {
+        "morning": "צַבַּאח אֵלְחֵ‘יר",
+        "morning_response": "צַבַּאח (אל)נֿורּ",
+        "evening": "מַסַאא (אלְ)חֵ‘יר",
+        "evening_response": "מַסַאא (אל)נֿורּ"
+      },
+      "english": {
+        "morning": "Good morning",
+        "morning_response": "Good morning (response)",
+        "evening": "Good evening",
+        "evening_response": "Good evening (response)"
+      }
+    },
+    "learning_tips": {
+      "method_1": "Store new words in a shared Google Drive document for the group, managed by a volunteer.",
+      "method_2": "Write words as explained in Han's tutorial video."
+    }
+  }
+  

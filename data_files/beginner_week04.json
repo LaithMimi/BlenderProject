@@ -1,0 +1,85 @@
+{
+    "lesson": "Beginner - Week 04",
+    "sections": [
+      {
+        "title": "Greetings",
+        "entries": [
+          {
+            "arabic": "مَرْحَبَا, كِيف حَالَك؟",
+            "hebrew": "מַרְחַבַּ, כִּיף חַאלַכּ?",
+            "english": "Hello, how are you?"
+          },
+          {
+            "arabic": "مَرْحَبْتِين, كلُّ شِي تَمَام!",
+            "hebrew": "מַרְחַבְּתֵין, כֻּלּ שִי תַמַאם!",
+            "english": "Hello twice, everything is fine!"
+          }
+        ]
+      },
+      {
+        "title": "Pronunciation",
+        "entries": [
+          {
+            "arabic": "كْثِير حِلو!",
+            "hebrew": "כְּתִ׳יר חִלוֻּ!",
+            "english": "Very nice!"
+          },
+          {
+            "arabic": "ثْنِين",
+            "hebrew": "תְ׳ניֵן",
+            "english": "Two"
+          },
+          {
+            "arabic": "حِلو.",
+            "hebrew": "חִלוּ.",
+            "english": "Sweet."
+          },
+          {
+            "arabic": "يوم الخمَيس.",
+            "hebrew": "יוםׂ אֵלחְַ׳מִיס.",
+            "english": "Thursday."
+          }
+        ]
+      },
+      {
+        "title": "Letters & Sounds",
+        "entries": [
+          {
+            "arabic": "غرفة.",
+            "hebrew": "עֻ׳רְפֵה.",
+            "english": "Room."
+          },
+          {
+            "arabic": "بطََاطَا.",
+            "hebrew": "בַּטַאטַא.",
+            "english": "Potato."
+          },
+          {
+            "arabic": "قهْوة.",
+            "hebrew": "קַהְוּהֵ.",
+            "english": "Coffee."
+          }
+        ]
+      },
+      {
+        "title": "Bonus",
+        "entries": [
+          {
+            "arabic": "أبجدية",
+            "hebrew": "אַבְּג׳ַדִיהֵ",
+            "english": "Alphabet."
+          },
+          {
+            "arabic": "مبسوطة",
+            "hebrew": "מַבְּסוּטה.",
+            "english": "Happy (feminine)."
+          }
+        ]
+      },
+      {
+        "title": "Expectations & Guidelines",
+        "content": "The participants are not professional Arabic teachers. The goal is to practice vocabulary and pronunciation. Sensitivity to cultural differences is encouraged."
+      }
+    ]
+  }
+  
