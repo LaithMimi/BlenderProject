@@ -1,167 +1,88 @@
 import os
+import logging
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
-import logging
-from openai import OpenAI
-from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
-import numpy as np
+import openai
+from flask_pymongo import PyMongo
 
- 
-# TODO: add logs for users chat data, only admin can see it
-# TODO: integrate an API from DataStax/Milvus to store your data in it
 
-# TODO: make the material in JSON fromat and store it in the database
-# TODO: refine the assistant's responses to be more accurate and helpful
-
-# ISSUE: the responses are not correct 
-# ISSUE: Assitant -API- is not as expected,
-#           found that the ChatGPT isn't well,
-#                Gemini asstitant is better for now
-
-# Load environment variables
 load_dotenv()
 
-# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# -------------------------------------------------------------------
+# 1) Setup logging
+# -------------------------------------------------------------------
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-# Initialize OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# -------------------------------------------------------------------
+# 2) Setup OpenAI
+# -------------------------------------------------------------------
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Milvus Connection and Collection Setup
-def setup_milvus_collection(collection_name):
-    """
-    Create Milvus collection if it doesn't exist
-    """
-    try:
-        connections.connect(
-            alias="default", 
-            host=os.getenv("MILVUS_HOST", "localhost"),
-            port=os.getenv("MILVUS_PORT", "19530")
-        )
-        logger.info("Successfully connected to Milvus!")
+# -------------------------------------------------------------------
+# 3) Configure MongoDB
+# -------------------------------------------------------------------
+app.config["MONGO_URI"] = os.getenv("MONGO_URI")
+mongo = PyMongo(app)
 
-        # Check if collection exists, create if not
-        if not utility.has_collection(collection_name):
-            # Define collection schema
-            fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
-                FieldSchema(name="dialect", dtype=DataType.VARCHAR, max_length=50),
-                FieldSchema(name="week", dtype=DataType.VARCHAR, max_length=20),
-                FieldSchema(name="topic", dtype=DataType.VARCHAR, max_length=100)
-            ]
-            schema = CollectionSchema(fields=fields, description=f"{collection_name} collection")
-            
-            # Create collection
-            collection = Collection(name=collection_name, schema=schema)
-            
-            # Create index
-            index_params = {
-                "metric_type": "COSINE",
-                "index_type": "IVF_FLAT",
-                "params": {"nlist": 1024}
-            }
-            collection.create_index(field_name="embedding", index_params=index_params)
-            logger.info(f"Created collection {collection_name}")
-        
-    except Exception as e:
-        logger.error(f"Milvus setup failed: {e}")
-        raise
+# my JSON files have been inserted into a collection named 'materials'
+materials_coll = mongo.db["materials"]
 
-# Define collections for different levels
-LEVEL_COLLECTIONS = {
-    "beginner": "arabic_beginner",
-    "intermediate": "arabic_intermediate", 
-    "advanced": "arabic_advanced",
-    "expert": "arabic_expert"
-}
-
-# Setup collections on startup
-for collection_name in LEVEL_COLLECTIONS.values():
-    setup_milvus_collection(collection_name)
-
+# -------------------------------------------------------------------
+# 4) Helper function: get_relevant_materials
+# -------------------------------------------------------------------
 def get_relevant_materials(level, week, question):
     """
-    Retrieve relevant teaching materials with improved error handling and logging
+    Retrieve relevant teaching materials from the MongoDB 'materials' collection
+    based on the user's level and week. 
     """
-    try:
-        collection_name = LEVEL_COLLECTIONS.get(level, LEVEL_COLLECTIONS["beginner"])
-        collection = Collection(collection_name)
-        collection.load()
-        
-        # Add timeout and retry mechanism
-        try:
-            embedding_response = openai_client.embeddings.create(
-                model="text-embedding-ada-002",
-                input=question
-            )
-        except Exception as embed_error:
-            logger.warning(f"Embedding generation failed: {embed_error}")
-            # Fallback embedding generation or default vector
-            query_vector = [0.0] * 1536  
-        
-        query_vector = embedding_response.data[0].embedding
-        
-        # Enhanced search parameters with fallback
-        search_params = {
-            "metric_type": "COSINE",
-            "params": {"nprobe": 10}
-        }
-        
-        # More robust filtering
-        expr = f'week == "{week}"' if week and week.lower() != "all" else None
-        
-        try:
-            results = collection.search(
-                data=[query_vector],
-                anns_field="embedding",
-                param=search_params,
-                limit=5,
-                expr=expr,
-                output_fields=["content", "dialect", "week", "topic"]
-            )
-        except Exception as search_error:
-            logger.error(f"Vector search failed: {search_error}")
-            return []
-        
-        # Comprehensive result processing with validation
-        materials = []
-        for hits in results:
-            for hit in hits:
-                try:
-                    material = {
-                        "content": hit.entity.get("content", ""),
-                        "dialect": hit.entity.get("dialect", "Unknown"),
-                        "week": hit.entity.get("week", "Unspecified"),
-                        "topic": hit.entity.get("topic", "General"),
-                        "similarity": hit.score
-                    }
-                    materials.append(material)
-                except Exception as parsing_error:
-                    logger.warning(f"Material parsing error: {parsing_error}")
-        
-        return materials
-    
-    except Exception as e:
-        logger.critical(f"Catastrophic error in material retrieval: {e}")
+
+    # EXAMPLE APPROACH:
+    # Each JSON doc has a "lesson" field, like "Beginner - Week 1", "Beginner - Week 2", etc.
+    # We'll build that string from level + week. 
+
+    # Suppose the user passes: level="beginner", week="week01"
+    # Then my doc might have "lesson": "Beginner - Week 1"
+    # We'll parse out the numeric part from "week01" => "1"
+    # Or just do a simple guess: "Beginner - Week 01"
+
+    # Turn "beginner" -> "Beginner"
+    level_str = level.capitalize()  # e.g. 'Beginner'
+   
+    # We'll do a quick parse for digits:
+    week_number = ''.join(filter(str.isdigit, week)) or '1'  # default to '1' if no digit found
+   
+    # Build the lesson key
+    lesson_key = f"{level_str} - Week {int(week_number)}"
+
+    # Query the DB for a single doc with "lesson": "Beginner - Week 1"
+    doc = materials_coll.find_one({"lesson": lesson_key})
+    if doc:
+        # Convert the _id to a string for convenience
+        doc["_id"] = str(doc["_id"])
+        # Return as a list, so the calling code can iterate
+        return [doc]
+    else:
+        # If not found, just return an empty list
+        logger.info(f"No document found for lesson '{lesson_key}'. Returning empty list.")
         return []
-    
+
+# -------------------------------------------------------------------
+# 5) Prompt-building function 
+# -------------------------------------------------------------------
 def create_arabic_teaching_prompt(level, week, question, gender, language, materials):
     """
     Create a detailed prompt for the AI to teach Arabic effectively.
     """
-    # Base prompt instructing the AI on how to teach
+    # Base prompt
     base_prompt = f"""
     You are an expert Arabic language tutor specializing in teaching spoken dialect Levant. 
     Your name is 'Arabic Tutor' and your primary goal is to help students learn 
-    authentic spoken Levant Arabic in a conversational, practical way.
+    authentic spoken Levant Arabic in a conversational, practical way, use only the given information to respond.
     
     Current student profile:
     - Level: {level}
@@ -174,7 +95,7 @@ def create_arabic_teaching_prompt(level, week, question, gender, language, mater
     1. AUTHENTICITY: Always teach natural, authentic spoken Arabic as used by natives - not formal MSA.
        Focus on practical, everyday expressions that locals actually use.
        
-    2. PERSONALIZATION: Adapt your teaching to the student's level and progress (week {week} of their {level} level).
+    2. PERSONALIZATION: Adapt teaching to the student's level and progress (week {week} of their {level} level).
        For beginners, use more of their preferred language. For advanced students, use more Hebrew.
        
     3. CULTURAL CONTEXT: Include cultural notes that help explain why certain phrases are used in specific contexts.
@@ -188,35 +109,33 @@ def create_arabic_teaching_prompt(level, week, question, gender, language, mater
     5. RESPONSE FORMAT:
        - If the student writes in their native language, respond primarily in that language with Arabic examples.
        - If the student attempts to write in Arabic, praise their effort and gently correct if needed.
-       - Always provide both Arabic script and  תמלול (based on their language preference).
+       - Always provide both Arabic script and תמלול (based on their language preference).
        - For {gender} students, use appropriate gendered forms in Arabic examples.
     """
-    
-    # Add relevant materials from the vector DB to the prompt
-    materials_prompt = "\nREFERENCE MATERIALS FOR THIS QUESTION:\n"
-    
-    for i, material in enumerate(materials, 1):
-        materials_prompt += f"""
-        Material {i}:
-        - Topic: {material.get('topic', 'General Arabic')}
-        - Dialect: {material.get('dialect', 'Levantine')}
-        - Week relevance: {material.get('week', 'N/A')}
-        - Content: {material.get('content', '')}
-        """
-    
-    # Add language formatting guidance based on the user's choice
+
+    # Add reference materials
+    materials_prompt = "\nREFERENCE MATERIALS FOR THIS QUESTION THAT YOUR RESPONSES SHOULD OBLY RELY ON:\n"
+
+    # 'materials' is a list of docs, typically one doc if matched by lesson
+    for i, mat in enumerate(materials, 1):
+        materials_prompt += f"Material {i}: {mat}\n"
+
+    # Add language formatting guidance
     if language == "arabic":
         language_guidance = "\nRespond primarily in Arabic script with minimal explanations in Hebrew.\n"
     elif language == "transliteration-hebrew":
         language_guidance = "\nProvide Arabic responses written in Hebrew characters, plus brief Hebrew explanations.\n"
     elif language == "transliteration-english":
         language_guidance = "\nProvide Arabic responses with English transliteration, plus Hebrew explanations.\n"
-    else:  # default English
+    else:
         language_guidance = "\nProvide responses mainly in Hebrew, with Arabic phrases in both Arabic script and Hebrew transliteration.\n"
-    
+
     complete_prompt = base_prompt + materials_prompt + language_guidance
     return complete_prompt
 
+# -------------------------------------------------------------------
+# 6) /ask endpoint
+# -------------------------------------------------------------------
 @app.route('/ask', methods=['POST'])
 def ask():
     try:
@@ -229,10 +148,15 @@ def ask():
         gender = data.get('gender', 'male')
         language = data.get('language', 'english')
         
-        # Retrieve relevant teaching materials
+        # Retrieve relevant teaching materials from Mongo
         teaching_materials = get_relevant_materials(level, week, question)
-        
-        # Create prompt for OpenAI
+       
+        # 2) **DEBUG PRINT** the retrieved materials
+        print("\n--- DEBUG: Extracted Materials ---")
+        print(teaching_materials)
+        print("---------------------------------\n")
+       
+        # Build the prompt for OpenAI
         prompt = create_arabic_teaching_prompt(
             level, 
             week, 
@@ -242,14 +166,14 @@ def ask():
             teaching_materials
         )
         
-        # Call ChatGPT API
-        response = openai_client.chat.completions.create(
+        # Call ChatGPT (OpenAI) API
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": question}
             ],
-            temperature=0.2,
+            temperature=0.0,
             max_tokens=1000
         )
         
@@ -261,16 +185,22 @@ def ask():
         return jsonify({
             "answer": answer,
             "language": language,
-            "direction": 'ltr'
+            "direction": text_direction
         })
     
     except Exception as e:
-        logger.error(f"Error in /ask endpoint: {e}")
+        logger.error(f"Error in /ask endpoint: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+# -------------------------------------------------------------------
+# 7) Home route
+# -------------------------------------------------------------------
 @app.route('/')
 def home():
     return render_template('index.html')
 
+# -------------------------------------------------------------------
+# 8) Run the Flask app
+# -------------------------------------------------------------------
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
